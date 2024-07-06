@@ -1,0 +1,1387 @@
+IT Work Sheet:-
+---------------
+
+
+USE [HRMS0524]
+GO
+/****** OBJECT:  STOREDPROCEDURE [DBO].[ITWORKSHEET]    SCRIPT DATE: 06-07-2024 10:41:20 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROCEDURE [DBO].[ITWORKSHEET]
+    @ACTION CHAR(1),
+    @CALC_IT_EMPNO INT
+AS
+BEGIN
+    IF @ACTION = 'A' --BASIC PAY,DA,HRA ---------------------------------------------------------------------------------
+    BEGIN
+        SELECT 
+            A.CALC_IT_EMPNO, 
+            A.CALC_IT_CODE, 
+            CASE 
+                WHEN B.ITE_DESC IS NULL THEN C.ED_DESC 
+                ELSE B.ITE_DESC 
+            END AS ITE_DESC,
+            A.CALC_IT_AMOUNT, 
+            A.CALC_IT_IND
+        FROM 
+            HRM_EMP_CALCIT A
+        LEFT JOIN 
+            HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+        LEFT JOIN 
+            HRM_ED_MASTER C ON A.CALC_IT_CODE = C.ED_CODE
+        WHERE 
+            A.CALC_IT_EMPNO = @CALC_IT_EMPNO 
+            AND (A.CALC_IT_CODE <= 1100 OR (A.CALC_IT_CODE >= 2001 AND A.CALC_IT_CODE <= 5000))
+        ORDER BY 
+            A.CALC_IT_EMPNO, 
+            A.CALC_IT_CODE;
+    END
+    IF @ACTION = 'B' --TOTALSALARY
+    BEGIN
+        SELECT 
+            SUM(A.CALC_IT_AMOUNT) AS TOTALAMOUNT
+        FROM 
+            HRM_EMP_CALCIT A
+        WHERE 
+            A.CALC_IT_EMPNO = @CALC_IT_EMPNO 
+            AND (A.CALC_IT_CODE <= 1100 OR (A.CALC_IT_CODE >= 2001 AND A.CALC_IT_CODE <= 5000));
+    END
+    IF @ACTION = 'C' --"EXEMPTION : "
+    BEGIN
+        SELECT 
+            A.CALC_IT_AMOUNT, 
+            B.ITE_DESC 
+        FROM 
+            HRM_EMP_CALCIT A
+        INNER JOIN 
+            HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+        WHERE 
+            A.CALC_IT_CODE IN (5001, 5003)
+            AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO;
+    END
+	IF @ACTION='D'--5501..5999 TAX EXEMPTIONS FROM HRM_EMP_TAXEXEMPT TABLE
+	BEGIN
+	SELECT A.CALC_IT_AMOUNT, B.ITE_DESC 
+             FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+              WHERE A.CALC_IT_CODE BETWEEN 5501 AND 5999
+             AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+              AND A.CALC_IT_CODE = B.ITE_CODE ORDER BY A.CALC_IT_CODE
+	END
+
+	IF @ACTION='E' --1102.GROSS SALARY-------------------------------------------------------------------
+	BEGIN
+	    SELECT 
+    (SELECT SUM(A.CALC_IT_AMOUNT) 
+     FROM HRM_EMP_CALCIT A 
+     WHERE A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+       AND (A.CALC_IT_CODE <= 1100 OR (A.CALC_IT_CODE >= 2001 AND A.CALC_IT_CODE <= 5000))
+    ) - 
+    (SELECT SUM(A.CALC_IT_AMOUNT)
+     FROM HRM_EMP_CALCIT A
+     INNER JOIN HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+     WHERE A.CALC_IT_CODE IN (5001, 5003)
+       AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+    ) AS GROSS_SALARY;
+	END
+
+	IF @ACTION='F' ---- 5002 --P.TAX EXAMPTION------------------------------------------------------------------------
+	BEGIN
+	 SELECT A.CALC_IT_AMOUNT, B.ITE_DESC AS ITE_DESC
+            FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+             WHERE A.CALC_IT_CODE = 5002
+             AND A.CALC_IT_EMPNO = 105
+             AND A.CALC_IT_CODE = B.ITE_CODE
+	END
+	IF @ACTION='G'----1103,1104
+	BEGIN
+	SELECT A.CALC_IT_AMOUNT, B.ITE_DESC 
+             FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+             WHERE A.CALC_IT_CODE IN (1103,1104)
+            AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+            AND A.CALC_IT_CODE = B.ITE_CODE
+	END
+
+	IF @ACTION='H'---- 5005 LOSS ON HOUSE PROPERTY
+	BEGIN
+	SELECT A.CALC_IT_AMOUNT, B.ITE_DESC 
+             FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+            WHERE A.CALC_IT_CODE = 5005
+            AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+             AND A.CALC_IT_CODE = B.ITE_CODE
+	END
+
+	IF @ACTION='I'---- 1105 GROSS TOTAL INCOME------------------------------------------------------------------
+	BEGIN
+	SELECT 
+    (SELECT SUM(A.CALC_IT_AMOUNT) AS TOTALAMOUNT
+     FROM HRM_EMP_CALCIT A
+     WHERE A.CALC_IT_EMPNO = @CALC_IT_EMPNO 
+     AND (A.CALC_IT_CODE <= 1100 OR (A.CALC_IT_CODE >= 2001 AND A.CALC_IT_CODE <= 5000))) - 
+    (SELECT A.CALC_IT_AMOUNT
+     FROM HRM_EMP_CALCIT A
+     JOIN HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+     WHERE A.CALC_IT_CODE = 5002
+     AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO) - 
+    (SELECT SUM(A.CALC_IT_AMOUNT)
+     FROM HRM_EMP_CALCIT A
+     INNER JOIN HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+     WHERE A.CALC_IT_CODE IN (5001, 5003)
+     AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO) AS GROSS_TOTAL_INCOME
+
+
+	END
+	IF @ACTION='J' --"LESS DEDUCTIONS : "
+	BEGIN
+	SELECT 
+    CASE 
+        WHEN (D.CALC_IT_AMOUNT <= ISNULL((SELECT SUM(EMPINV_AMOUNT) 
+                                           FROM HRM_EMP_INVEST A, HRM_SUBSECTIONS B 
+                                          WHERE A.EMPINV_EMPNO = D.CALC_IT_EMPNO 
+                                            AND A.EMPINV_MCODE = B.SUB_MCODE 
+                                            AND A.EMPINV_ITCODE = D.CALC_IT_CODE 
+                                            AND A.EMPINV_ITCODE = B.SUB_ITCODE 
+                                            AND A.EMPINV_SUBNO = B.SUB_SUBNO 
+                                            AND A.EMPINV_SCODE = B.SUB_SCODE  
+                                            AND A.EMPINV_DATE BETWEEN (SELECT BR_FIN_STARTDT FROM HRM_BR_PARAM) 
+                                                                 AND (SELECT BR_FIN_ENDDT FROM HRM_BR_PARAM)), 0)) 
+            THEN (SELECT SUM(EMPINV_AMOUNT) 
+                    FROM HRM_EMP_INVEST A, HRM_SUBSECTIONS B 
+                   WHERE A.EMPINV_EMPNO = D.CALC_IT_EMPNO 
+                     AND A.EMPINV_MCODE = B.SUB_MCODE 
+                     AND A.EMPINV_ITCODE = D.CALC_IT_CODE 
+                     AND A.EMPINV_ITCODE = B.SUB_ITCODE 
+                     AND A.EMPINV_SUBNO = B.SUB_SUBNO 
+                     AND A.EMPINV_SCODE = B.SUB_SCODE  
+                     AND A.EMPINV_DATE BETWEEN (SELECT BR_FIN_STARTDT FROM HRM_BR_PARAM) 
+                                           AND (SELECT BR_FIN_ENDDT FROM HRM_BR_PARAM)) 
+        ELSE D.CALC_IT_AMOUNT 
+    END AS 'CALC_IT_AMOUNT', 
+    C.ITE_DESC 
+FROM 
+    HRM_EMP_CALCIT D, 
+    HRM_IT_ENTRIES C 
+WHERE 
+    D.CALC_IT_CODE BETWEEN 7001 AND 7999 
+    AND D.CALC_IT_EMPNO =@CALC_IT_EMPNO
+    AND D.CALC_IT_CODE = C.ITE_CODE 
+ORDER BY 
+    D.CALC_IT_CODE;
+
+	END
+	IF @ACTION='K'
+	BEGIN
+	SELECT 
+    CASE 
+        WHEN (D.CALC_IT_AMOUNT <= ISNULL((SELECT SUM(EMPINV_AMOUNT) 
+                                           FROM HRM_EMP_INVEST A 
+                                           INNER JOIN HRM_SUBSECTIONS B ON A.EMPINV_MCODE = B.SUB_MCODE 
+                                                                     AND A.EMPINV_ITCODE = B.SUB_ITCODE 
+                                                                     AND A.EMPINV_SUBNO = B.SUB_SUBNO 
+                                                                     AND A.EMPINV_SCODE = B.SUB_SCODE 
+                                           WHERE A.EMPINV_EMPNO = D.CALC_IT_EMPNO 
+                                             AND A.EMPINV_ITCODE = D.CALC_IT_CODE 
+                                             AND A.EMPINV_DATE BETWEEN (SELECT BR_FIN_STARTDT FROM HRM_BR_PARAM) 
+                                                                  AND (SELECT BR_FIN_ENDDT FROM HRM_BR_PARAM)), 0)) 
+            THEN (SELECT SUM(EMPINV_AMOUNT) 
+                    FROM HRM_EMP_INVEST A 
+                    INNER JOIN HRM_SUBSECTIONS B ON A.EMPINV_MCODE = B.SUB_MCODE 
+                                                  AND A.EMPINV_ITCODE = B.SUB_ITCODE 
+                                                  AND A.EMPINV_SUBNO = B.SUB_SUBNO 
+                                                  AND A.EMPINV_SCODE = B.SUB_SCODE 
+                   WHERE A.EMPINV_EMPNO = D.CALC_IT_EMPNO 
+                     AND A.EMPINV_ITCODE = D.CALC_IT_CODE 
+                     AND A.EMPINV_DATE BETWEEN (SELECT BR_FIN_STARTDT FROM HRM_BR_PARAM) 
+                                           AND (SELECT BR_FIN_ENDDT FROM HRM_BR_PARAM)) 
+        ELSE D.CALC_IT_AMOUNT 
+    END AS CALC_IT_AMOUNT, 
+    C.ITE_DESC 
+FROM 
+    HRM_EMP_CALCIT D 
+INNER JOIN 
+    HRM_IT_ENTRIES C ON D.CALC_IT_CODE = C.ITE_CODE 
+WHERE 
+    D.CALC_IT_CODE = 9021 
+    AND D.CALC_IT_EMPNO = @CALC_IT_EMPNO
+ORDER BY 
+    D.CALC_IT_CODE;
+
+	END
+	IF @ACTION='L'
+	BEGIN
+	SELECT A.CALC_IT_TAXREBATE 
+              FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+              WHERE A.CALC_IT_CODE = 9021
+              AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+              AND A.CALC_IT_CODE = B.ITE_CODE
+	END
+
+
+
+	IF @ACTION='M'-- AMT9021 = 0  AMT80CCD = 0
+	BEGIN
+	DECLARE @AMT9021 DECIMAL(18, 2) = 0; 
+    DECLARE @AMT80CCD DECIMAL(18, 2) = 0; 
+	
+    SELECT @AMT9021 = A.CALC_IT_TAXREBATE
+    FROM HRM_EMP_CALCIT A
+    JOIN HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+    WHERE A.CALC_IT_CODE = 9021
+    AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO;
+	END
+
+
+
+
+
+	IF @ACTION='N' --'7000 TO SHOW REBATE FOR 80 CCC
+	BEGIN
+	DECLARE @REBATAMT DECIMAL(18, 2) = 0;
+	SELECT @REBATAMT = A.CALC_IT_AMOUNT
+    FROM HRM_EMP_CALCIT A
+    JOIN HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+    WHERE A.CALC_IT_CODE = 7000
+    AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+    ORDER BY A.CALC_IT_CODE;
+	END
+
+	IF @ACTION='O' --80 C PROVIDEND FUND ,80 C TOTAL, REBATE U/S 80 C                                
+	BEGIN
+	SELECT SUM(A.CALC_IT_AMOUNT) 'SUM' 
+              FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+              WHERE A.CALC_IT_CODE BETWEEN 8001 AND 8999 
+              AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+			  AND A.CALC_IT_CODE = B.ITE_CODE
+	END
+
+	IF @ACTION='P'  --1106.NET TAXABLE INCOME
+	BEGIN
+	 --SELECT A.CALC_IT_AMOUNT, B.ITE_DESC 
+  --           FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+  --           WHERE A.CALC_IT_CODE = 1106
+  --           AND A.CALC_IT_EMPNO =@CALC_IT_EMPNO
+  --          AND A.CALC_IT_CODE = B.ITE_CODE
+  		  SELECT 
+    (
+        (SELECT SUM(A.CALC_IT_AMOUNT) AS TOTALAMOUNT
+         FROM HRM_EMP_CALCIT A
+         WHERE A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+         AND (A.CALC_IT_CODE <= 1100 OR (A.CALC_IT_CODE >= 2001 AND A.CALC_IT_CODE <= 5000))) - 
+        (SELECT A.CALC_IT_AMOUNT
+         FROM HRM_EMP_CALCIT A
+         JOIN HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+         WHERE A.CALC_IT_CODE = 5002
+         AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO) - 
+        (SELECT SUM(A.CALC_IT_AMOUNT)
+         FROM HRM_EMP_CALCIT A
+         INNER JOIN HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+         WHERE A.CALC_IT_CODE IN (5001, 5003)
+         AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO)
+    ) - 
+    (
+        SELECT SUM(A.CALC_IT_AMOUNT) AS SUM
+        FROM HRM_EMP_CALCIT A
+        INNER JOIN HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+        WHERE A.CALC_IT_CODE BETWEEN 8001 AND 8999
+        AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+    ) AS NETTAXABLEINCOME;
+
+
+	END
+
+	IF @ACTION='Q' --1107.TAXABLE INCOME U/S 88D
+	BEGIN
+	--SELECT A.CALC_IT_AMOUNT, B.ITE_DESC 
+ --            FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+ --            WHERE A.CALC_IT_CODE = 1107
+ --           AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+ --            AND A.CALC_IT_CODE = B.ITE_CODE
+      	  SELECT 
+    (
+        (SELECT SUM(A.CALC_IT_AMOUNT) AS TOTALAMOUNT
+         FROM HRM_EMP_CALCIT A
+         WHERE A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+         AND (A.CALC_IT_CODE <= 1100 OR (A.CALC_IT_CODE >= 2001 AND A.CALC_IT_CODE <= 5000))) - 
+        (SELECT A.CALC_IT_AMOUNT
+         FROM HRM_EMP_CALCIT A
+         JOIN HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+         WHERE A.CALC_IT_CODE = 5002
+         AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO) - 
+        (SELECT SUM(A.CALC_IT_AMOUNT)
+         FROM HRM_EMP_CALCIT A
+         INNER JOIN HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+         WHERE A.CALC_IT_CODE IN (5001, 5003)
+         AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO)
+    ) - 
+    (
+        SELECT SUM(A.CALC_IT_AMOUNT) AS SUM
+        FROM HRM_EMP_CALCIT A
+        INNER JOIN HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+        WHERE A.CALC_IT_CODE BETWEEN 8001 AND 8999
+        AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+    ) AS TAXABLEINCOMEUS88D;
+
+	END
+
+	IF @ACTION='R' --5014.TAX BEFORE REBATE U/S 88D ADDED ON 11.02.05
+	BEGIN
+	SELECT A.CALC_IT_AMOUNT, B.ITE_DESC 
+             FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+            WHERE A.CALC_IT_CODE = 5014
+             AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+             AND A.CALC_IT_CODE = B.ITE_CODE
+	END
+
+	IF @ACTION='S' --ADD SURCHARGE
+	BEGIN
+	 SELECT A.CALC_IT_AMOUNT, B.ITE_DESC 
+             FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+             WHERE A.CALC_IT_CODE = 5008
+             AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO 
+             AND A.CALC_IT_CODE = B.ITE_CODE
+	END
+
+	IF @ACTION='T' --TOTAL TAX PAYABLE
+	BEGIN
+	SELECT A.CALC_IT_AMOUNT, B.ITE_DESC 
+             FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+             WHERE A.CALC_IT_CODE = 5009
+             AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+             AND A.CALC_IT_CODE = B.ITE_CODE
+	END
+
+	IF @ACTION='U' --LESS TAX ALREADY PAID
+	BEGIN
+	SELECT A.CALC_IT_AMOUNT, B.ITE_DESC
+            FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+             WHERE A.CALC_IT_CODE = 5010
+             AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+             AND A.CALC_IT_CODE = B.ITE_CODE
+	END
+
+	IF @ACTION='V' --NET TAX PAYABLE
+	BEGIN
+	SELECT DISTINCT A.CALC_IT_AMOUNT, B.ITE_DESC 
+             FROM HRM_EMP_CALCIT A, HRM_IT_ENTRIES B
+            WHERE A.CALC_IT_CODE = 5011
+             AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO
+             AND A.CALC_IT_CODE = B.ITE_CODE
+	END
+
+	
+	IF @ACTION='W'  -- NET TAX PAYABLE PER MONTH
+	BEGIN
+--	SELECT DISTINCT 
+--    ROUND(A.CALC_IT_AMOUNT / 10, 0) AS ROUNDEDAMOUNT, 
+--    B.ITE_DESC 
+--FROM 
+--    HRM_EMP_CALCIT A
+--JOIN 
+--    HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+--WHERE 
+--    A.CALC_IT_CODE = 5011
+--    AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO;
+DECLARE @CALCMONTH INT = 5; -- EXAMPLE: MAY (YOU CAN SET THIS VALUE DYNAMICALLY AS NEEDED)
+
+SELECT DISTINCT 
+    ROUND(
+        CASE 
+            WHEN @CALCMONTH = 4 THEN A.CALC_IT_AMOUNT / 12
+            WHEN @CALCMONTH = 5 THEN A.CALC_IT_AMOUNT / 11
+            WHEN @CALCMONTH = 6 THEN A.CALC_IT_AMOUNT / 10
+            WHEN @CALCMONTH = 7 THEN A.CALC_IT_AMOUNT / 9
+            WHEN @CALCMONTH = 8 THEN A.CALC_IT_AMOUNT / 8
+            WHEN @CALCMONTH = 9 THEN A.CALC_IT_AMOUNT / 7
+            WHEN @CALCMONTH = 10 THEN A.CALC_IT_AMOUNT / 6
+            WHEN @CALCMONTH = 11 THEN A.CALC_IT_AMOUNT / 5
+            WHEN @CALCMONTH = 12 THEN A.CALC_IT_AMOUNT / 4
+            WHEN @CALCMONTH = 1 THEN A.CALC_IT_AMOUNT / 3
+            WHEN @CALCMONTH = 2 THEN A.CALC_IT_AMOUNT / 2
+            WHEN @CALCMONTH = 3 THEN A.CALC_IT_AMOUNT / 1
+        END, 
+        0
+    ) AS ROUNDEDAMOUNT, 
+    B.ITE_DESC 
+FROM 
+    HRM_EMP_CALCIT A
+JOIN 
+    HRM_IT_ENTRIES B ON A.CALC_IT_CODE = B.ITE_CODE
+WHERE 
+    A.CALC_IT_CODE = 5011
+    AND A.CALC_IT_EMPNO = @CALC_IT_EMPNO;
+
+
+	END
+
+	IF @ACTION='Y'
+	BEGIN
+	SELECT EMP_NO , EMP_NAME   FROM HRM_EMP_MASTER WHERE  EMP_STATUS=1
+	END
+
+	
+
+	
+END;
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+=================
+
+SALARY REGISTER
+=================
+
+USE [HRMS0524]
+GO
+/****** Object:  StoredProcedure [dbo].[HRMS_SalaryRegisterNew]    Script Date: 06-07-2024 10:44:45 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER procedure [dbo].[HRMS_SalaryRegisterNew] @Action varchar(1), @Branch smallint, @FromEmp int, @ToEmp int, @Emp int
+as
+begin
+	if @Action='A'
+	begin
+		if @Branch=0
+		begin
+			SELECT Fin_Year, Emp_Name, Emp_No, Branch, Designation,Emp_JoinDt
+        FROM
+        (
+            SELECT 
+                CONVERT(VARCHAR(10), DATENAME(MM, DATEADD(M, 1, Br_LastProcess))) + '-' + CAST(YEAR(Br_LastProcess) AS VARCHAR(4)) AS Fin_Year
+            FROM Hrm_Br_Param
+        ) AS Subquery1
+        CROSS JOIN
+        (
+            SELECT distinct
+                Emp_Name, Emp_No,Emp_JoinDt, b.Hrm_Desc AS Branch, c.Hrm_Desc AS Designation
+            FROM 
+                Hrm_Emp_Master a
+                LEFT JOIN Hrm_Genmst b ON b.Hrm_Scode = a.Emp_Dept
+                LEFT JOIN Hrm_Genmst c ON c.Hrm_Scode = a.Emp_Desig
+            WHERE 
+                b.Hrm_Mcode = 3 
+                AND c.Hrm_Mcode = 10 
+                AND a.Emp_Status = 1
+				
+                
+        ) AS Subquery2 Order by Emp_No;
+		end
+		else
+		begin
+			SELECT Fin_Year, Emp_Name, Emp_No, Branch, Designation,Emp_JoinDt
+        FROM
+        (
+            SELECT 
+                CONVERT(VARCHAR(10), DATENAME(MM, DATEADD(M, 1, Br_LastProcess))) + '-' + CAST(YEAR(Br_LastProcess) AS VARCHAR(4)) AS Fin_Year
+            FROM Hrm_Br_Param
+        ) AS Subquery1
+        CROSS JOIN
+        (
+            SELECT 
+                Emp_Name, Emp_No,Emp_JoinDt, b.Hrm_Desc AS Branch, c.Hrm_Desc AS Designation
+            FROM 
+                Hrm_Emp_Master a
+                LEFT JOIN Hrm_Genmst b ON b.Hrm_Scode = a.Emp_Dept
+                LEFT JOIN Hrm_Genmst c ON c.Hrm_Scode = a.Emp_Desig
+            WHERE 
+                b.Hrm_Mcode = 3 
+                AND c.Hrm_Mcode = 10 
+                AND a.Emp_Status = 1 
+				AND (select CBr_Code from Hrm_CompBranch where CBr_Code=a.Emp_Branch)=@Branch
+                AND a.Emp_No BETWEEN @FromEmp AND @ToEmp
+				
+        ) AS Subquery2 Order by Emp_No;
+		end
+	end
+	if @Action='B'
+	begin
+		 Select distinct (COUNT(Emp_No)+COUNT(Emp_No))as Cnt from Hrm_Emp_Master
+	end
+	if @Action='D'
+	begin
+		SELECT distinct(SELECT ED_Desc FROM Hrm_ED_Master WHERE ED_Code = Cu_Tr_Code) AS 'ED_Desc', Cu_Tr_Amt, Cu_Tr_Code 
+        FROM Hrm_currentLedger 
+        WHERE Cu_Tr_EmpNo= @Emp
+        AND Cu_Tr_Code >= 5000
+        AND Cu_Tr_Payable = 'P' 
+        AND Cu_Tr_Amt <> 0;
+	end
+	IF @Action = 'E'
+BEGIN
+    SELECT distinct
+        CASE 
+            WHEN (SELECT COUNT(*) 
+                  FROM Hrm_ArrearsBreakUps 
+                  WHERE ArrearBK_EmpNo = @Emp 
+                  AND MONTH(ArrearBK_From) = MONTH(GETDATE()) 
+                  AND YEAR(ArrearBK_From) = YEAR(GETDATE()) 
+                  AND ArrearBK_Code = 1001) > 0 
+            THEN ISNULL((SELECT ED_Amount 
+                         FROM Hrm_Emp_ED 
+                         WHERE ED_Code = 1001 
+                         AND ED_EmpNo = @Emp), 0) +
+                 ISNULL((SELECT Arrear_Amt 
+                         FROM Hrm_Arrears 
+                         WHERE Arrear_EmpNo = @Emp 
+                         AND Arrear_Code = 1001 
+                         AND Arrear_ProcessDt IS NULL), 0)
+            ELSE
+                ISNULL((SELECT ED_Amount 
+                         FROM Hrm_Emp_ED 
+                         WHERE ED_Code = 1001 
+                         AND ED_EmpNo = @Emp), 0)
+        END AS OriBasic,
+        (SELECT ED_Desc 
+         FROM Hrm_ED_Master 
+         WHERE ED_Code = Cu_Tr_Code) AS 'ED_Desc', 
+        Cu_Tr_Amt, 
+        Cu_Tr_Code 
+    FROM Hrm_currentLedger 
+    WHERE Cu_Tr_EmpNo = @Emp
+      AND Cu_Tr_Code < 4999
+      AND Cu_Tr_Payable = 'P' 
+      AND Cu_Tr_Amt <> 0;
+END
+
+	if @Action= 'N'
+	begin
+		SELECT distinct (Earnings.EarningsAmount - Deductions.DeductionsAmount) As NetSalary
+                 FROM
+                    (SELECT SUM(Cu_Tr_Amt) AS EarningsAmount
+                     FROM Hrm_CurrentLedger
+                     WHERE Cu_Tr_Code < 5000
+                     AND Cu_Tr_Payable = 'P'
+                     AND Cu_Tr_Amt <> 0
+                     AND Cu_Tr_EmpNo = @Emp) AS Earnings,
+                    (SELECT SUM( distinct Cu_Tr_Amt) AS DeductionsAmount
+                     FROM Hrm_CurrentLedger
+                     WHERE Cu_Tr_Code >= 5000
+                     AND Cu_Tr_Payable = 'P'
+                     AND Cu_Tr_Amt <> 0
+                     AND Cu_Tr_EmpNo = @Emp) AS Deductions;
+	end
+	if @Action='G'
+	begin
+		SELECT distinct SUM(Cu_Tr_Amt) AS EarningsAmount
+                     FROM Hrm_CurrentLedger
+                     WHERE Cu_Tr_Code < 5000
+                     AND Cu_Tr_Payable = 'P'
+                     AND Cu_Tr_Amt <> 0
+                     AND Cu_Tr_EmpNo = @Emp
+	end
+	if @Action = 'L'
+	begin
+		SELECT SUM(DISTINCT Cu_Tr_Amt) AS Total_Cu_Tr_Amt
+FROM Hrm_currentLedger
+WHERE Cu_Tr_EmpNo = @Emp AND Cu_Tr_Code >= 5001 AND Cu_Tr_Payable = 'P';
+	end
+	If @Action='O'
+	begin
+	SELECT distinct SUM(Cu_Tr_Amt) AS OtherEarningsAmount
+                     FROM Hrm_CurrentLedger
+                     WHERE Cu_Tr_Code < 5000
+                     AND Cu_Tr_Payable = 'P'
+                     AND Cu_Tr_Amt <> 0
+                     AND Cu_Tr_EmpNo = @Emp
+					 And Cu_Tr_Code Not in(1001,1002,1003,1005,1006)
+	end
+	If @Action='S'
+	begin
+	SELECT distinct SUM(Cu_Tr_Amt) AS otherDeductionsAmount
+                     FROM Hrm_CurrentLedger
+                     WHERE Cu_Tr_Code >= 5000
+                     AND Cu_Tr_Payable = 'P'
+                     AND Cu_Tr_Amt <> 0
+                     AND Cu_Tr_EmpNo = @Emp
+					 And Cu_Tr_Code Not in(2011,5001,5002,5005,5006)
+	end
+
+	If @Action='M'
+	begin
+	Select CBr_Code,CBr_Name from Hrm_CompBranch 
+	end
+
+	If @Action='Q'
+	begin
+	if @Branch =0
+	begin
+		Select Emp_Name,Emp_No from Hrm_Emp_Master where Emp_Status=1 order by Emp_No
+    end
+    else
+	begin
+		Select Emp_Name,Emp_No from Hrm_Emp_Master where Emp_Status=1   and (select CBr_Code from Hrm_CompBranch where CBr_Code=Emp_Branch )=  @Branch
+	end	
+	end
+	IF @Action = 'Y'
+BEGIN
+    SELECT distinct
+        (CASE 
+            WHEN (SELECT COUNT(*) 
+                  FROM Hrm_ArrearsBreakUps 
+                  WHERE ArrearBK_EmpNo = a.Cu_Tr_EmpNo 
+                  AND MONTH(ArrearBK_From) = a.Cu_Tr_Month 
+                  AND YEAR(ArrearBK_From) = a.Cu_Tr_Year 
+                  AND ArrearBK_Code = 1001) > 0 
+            THEN ISNULL((SELECT ED_Amount 
+                         FROM Hrm_Emp_ED 
+                         WHERE ED_Code = 1001 
+                         AND ED_EmpNo = a.Cu_Tr_EmpNo), 0) +
+                 ISNULL((SELECT Arrear_Amt 
+                         FROM Hrm_Arrears 
+                         WHERE Arrear_EmpNo = a.Cu_Tr_EmpNo 
+                         AND Arrear_Code = 1001 
+                         AND Arrear_ProcessDt IS NULL), 0)
+            ELSE
+                ISNULL((SELECT ED_Amount 
+                         FROM Hrm_Emp_ED 
+                         WHERE ED_Code = 1001 
+                         AND ED_EmpNo = a.Cu_Tr_EmpNo), 0)
+        END) AS OriBasic
+    FROM 
+        Hrm_currentLedger a
+    WHERE 
+        a.Cu_Tr_EmpNo BETWEEN @FromEmp AND @ToEmp 
+		
+		 AND Cu_Tr_Payable = 'P'
+END
+
+end
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+============================
+
+LEAVE- PARTICULAR
+============================
+
+USE [HRMS0524]
+GO
+/****** Object:  StoredProcedure [dbo].[HRMS_LeaveParticulars_CRD]    Script Date: 06-07-2024 10:46:10 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+--Created by Bharath on 15-04-2024
+-- Created for the purpose of Addition, Deletion and Updation of Leave Application data
+
+ALTER procedure [dbo].[HRMS_LeaveParticulars_CRD] @Sl_No int,@Emp_No int,@Code int,@AppDt date,
+@ToDt date,@Days int,@FrmDt date,@LS smallint,@LT char(1),@Reason varchar(500),@Sanc char(1),
+@Action char(1),@Result Varchar(100) output
+as
+begin
+if @Action='Z'
+begin
+	select @Sl_No= MAX(LvApp_SlNo)+1 from Hrm_LeaveApplication
+	Declare @cnt int
+	select @cnt= COUNT(*) from Hrm_LeaveApplication where @Emp_No=LvApp_EmpNo
+	and(@FrmDt BETWEEN LvApp_FromDt AND LvApp_ToDt
+           OR @ToDt BETWEEN LvApp_FromDt AND LvApp_ToDt
+           OR LvApp_ToDt BETWEEN @FrmDt AND @ToDt
+           OR LvApp_ToDt BETWEEN @FrmDt AND @ToDt)
+	if @cnt>0
+	begin
+		set @Result='Data for these Days Already exists'
+	end
+	else
+	begin
+		insert into Hrm_LeaveApplication (LvApp_SlNo,LvApp_EmpNo,LvApp_Code,LvApp_Crdate,LvApp_AppDate,LvApp_ToDt,
+		LvApp_Days,LvApp_FromDt,LvApp_LeaveSanc,LvApp_PLSL,LvApp_Reason,LvApp_Sanctioned,LvApp_Eby) values (@Sl_No,@Emp_No,@Code,@AppDt,@AppDt,@ToDt,@Days,
+		@FrmDt,@LS,@LT,@Reason,@Sanc,1)
+		set @Result='Data Sucessfully inserted!'
+	end
+	
+end
+if @Action='Y'
+begin
+	delete from Hrm_LeaveApplication where LvApp_SlNo=@Sl_No
+	set @Result='Data Successfully Deleted!'
+end
+if @Action='X'
+begin
+	Update Hrm_LeaveApplication
+	set LvApp_Code=@Code, LvApp_Days=@Days,LvApp_FromDt=@FrmDt,LvApp_LeaveSanc=@LS, LvApp_PLSL=@LT,LvApp_Reason=@Reason,
+	LvApp_Sanctioned=@Sanc,LvApp_ToDt=@ToDt
+	where LvApp_SlNo=@Sl_No 
+	set @Result='Data Successfully Updated!'
+end
+
+if @Action='A'
+begin
+SELECT BR_NAME, BR_ADD1, BR_ADD2, BR_ADD3, BR_CITY, BR_PIN FROM HRM_BR_PARAM
+end
+
+if @Action='B'
+begin
+SELECT LPARAM_REF , ISNULL(MAX(LPARAM_NO)+1,0) 'REFNO' FROM HRM_LEAVE_PARAM GROUP BY LPARAM_REF
+end
+if @Action='C'
+begin
+Select Year(Br_Leave_StartDt) 'StYr' from Hrm_Br_Param
+end
+if @Action='D'
+begin
+select isnull(Lledg_Balance,0) PLBalance from Hrm_LeaveLedger where Lledg_EmpNo = @Emp_No
+                     and Lledg_Code = 2
+
+end
+
+end
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+====================
+CALUCLATE-INCOME TAX
+===================
+
+USE [HRMS0524]
+GO
+/****** Object:  StoredProcedure [dbo].[Sp_CalculateEmployeeIncomeTax]    Script Date: 06-07-2024 10:47:49 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROCEDURE [dbo].[Sp_CalculateEmployeeIncomeTax]
+    @EmpNo INT,
+    @CalcDate DATE
+---------------------------------------------------------------------------------------------------------------------------------------
+AS
+BEGIN
+    DECLARE @NetTaxIncome DECIMAL(18, 2)
+    DECLARE @SurchargePer DECIMAL(5, 2)
+    DECLARE @BalTaxPayable DECIMAL(18, 2)
+    DECLARE @Surcharge DECIMAL(18, 2)
+    DECLARE @WomanITaxExemption DECIMAL(18, 2) = 0 -- Set appropriate value
+    DECLARE @Gender CHAR(1)
+    DECLARE @Amt5006 DECIMAL(18, 2)
+    DECLARE @Amt5012 DECIMAL(18, 2)
+    DECLARE @VarVariant DECIMAL(18, 2)
+    DECLARE @TotalTax DECIMAL(18, 2)
+    DECLARE @TaxPaid DECIMAL(18, 2)
+    DECLARE @NetTaxPayable DECIMAL(18, 2)
+	DECLARE @TotalAmount DECIMAL(10,2)
+	DECLARE @@NetTax decimal(18,2)
+    DECLARE @Taxafter decimal(18,2)
+ -----------------------------------------------------------------------------------------------------------------------------------------
+	    -- to insert sum of salary amounts (Basic, DA, HRA, CCA, Conveyance, Adhoc allowance
+	    EXEC Sp_IT_TotSal @EmpNo,@CalcDate
+------------------------------------------------------------------------------------------------------------------------------------------
+        -- Sum of salary amounts and insert into Hrm_Emp_CalcIT
+		
+		INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind)
+        VALUES (@EmpNo,  1101, (SELECT top 1 SUM(distinct Calc_IT_Amount) AS TotalAmount FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND (Calc_IT_Code <= 1100 
+        OR (Calc_IT_Code >= 2001 AND Calc_IT_Code <= 5000))),  'E' );
+
+-------------------------------------------------------------------------------------------------------------------------------------------
+
+        -- HRA exemption amount
+        EXEC Sp_IT_HRAExempt @EmpNo;
+---------------------------------------------------------------------------------------------------------------------------------------------
+        --calculate P Tax exemption and insert a record in Hrm_Emp_CalcIT for a employee
+		--Exec Sp_IT_NewPTaxExempt @EmpNo 
+		Exec Sp_IT_PTaxExempt  @EmpNo
+----------------------------------------------------------------------------------------------------------------------------------------------	
+        -- Conveyance Amt exemption
+        EXEC Sp_IT_ConvExempt @EmpNo;
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+		select TaxExempt_EmpNo, TaxExempt_Code, TaxExempt_Amt from Hrm_Emp_TaxExempt where TaxExempt_EmpNo = @EmpNo  --doubt
+        and TaxExempt_Date between (select Br_Fin_StartDt from Hrm_Br_Param)
+        and (select Br_Fin_EndDt from Hrm_Br_Param)
+
+		INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind, Calc_IT_QualAmount, Calc_IT_TaxRebate)  SELECT 
+       @EmpNo AS Calc_IT_EmpNo,
+       TaxExempt_Code AS Calc_IT_Code,
+       TaxExempt_Amt AS Calc_IT_Amount,
+       'D' AS Calc_IT_Ind,
+        0 AS Calc_IT_QualAmount,
+        0 AS Calc_IT_TaxRebate FROM  Hrm_Emp_TaxExempt WHERE TaxExempt_EmpNo = @EmpNo AND TaxExempt_Date BETWEEN ( SELECT Br_Fin_StartDt FROM Hrm_Br_Param
+        ) AND ( SELECT Br_Fin_EndDt FROM Hrm_Br_Param);
+
+---------------------------------------------------------------------------------------------------------------------------------------------------
+        -- Gross Salary 1102
+        EXEC Sp_IT_Gross @EmpNo 
+--------------------------------------------------------------------------------------------------------------------------------------------------
+		-- Standard Deduction 5004
+		Exec Sp_IT_Std @EmpNo
+--------------------------------------------------------------------------------------------------------------------------------------------------		       
+		                                       
+--        -- NSC Withdrawals 1103
+       EXEC Sp_IT_EmpNSCWithdraw @EmpNo   
+----------------------------------------------------------------------------------------------------------------------------------------------------
+	   -- Interest on NSC 1104
+	   Exec Sp_IT_EmpNSCInt @EmpNo,@CalcDate
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+--        -- Insert interest on NSC (1104)
+       INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind)
+        VALUES (@EmpNo, 1104, 0, 'E')
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+
+--        -- Loss of House Property 5005
+        EXEC Sp_IT_EmpIntHouse @EmpNo --doubt
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+
+--        -- Total Salary
+        EXEC Sp_IT_TotalSalary @EmpNo
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+	
+
+--        -- Permissible Deduction Amounts under Section 80 :Codes are picked from Hrm_IT_Entries table from >= 7001 and <= 7999
+         EXEC Sp_IT_DedSec80 @EmpNo
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+--        -- Codes above 9000
+       --EXEC Sp_IT_DedSecCode9080 @EmpNo  this procedure is not in database
+
+
+
+--        -- LIC Premium 8001
+        EXEC Sp_IT_DedSec88_LIC @EmpNo   
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+
+--        -- Sum of PF (5001) amounts deduction from the salary during this financial year --8002
+       EXEC Sp_IT_DedSec88_PF @EmpNo, @CalcDate
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+--        -- Interest on NSC investments --8003
+       EXEC Sp_IT_DedSec88_NSCInt @EmpNo, @CalcDate
+
+
+
+--        -- Sum of NSC investments -- 8004
+       EXEC Sp_IT_DedSec88_NSC @EmpNo
+
+
+
+--        -- Permissible Deduction Amounts under Section 88:-  8005
+        EXEC Sp_IT_DedSec88 @EmpNo --Error :- 'Error converting data type nvarchar to int.'
+
+
+
+
+--        -- Section Rebate  To SUM all calculated amounts from secion investement-- and find the Sec_MaxRebateAmt, Sec_RebatePer (from Hrm_Sections)
+    -- inserting in Hrm_Emp_CalcIT Table with-- Section 54 in 6000 as Calc_IT_Code-- Section 80 in 7000 as Calc_IT_Code
+          EXEC Sp_IT_SectionRebate @EmpNo
+
+--        -- Section 88 Rebate :8000 as Calc_IT_Code
+           EXEC Sp_IT_SectionRebate88 @EmpNo
+
+--        -- Calculate Net Taxable Income (1106)
+          SELECT top 1 @NetTaxIncome = 
+            ISNULL((SELECT  top 1 SUM(Calc_IT_Amount) FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 1105), 0) - 
+            ISNULL((SELECT top 1 SUM(Calc_IT_Amount) FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 6000), 0) - 
+            ISNULL((SELECT top 1 SUM(Calc_IT_Amount) FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 7000), 0) - 
+            ISNULL((SELECT top 1 SUM(Calc_IT_TaxRebate) FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 8000), 0) - 
+            ISNULL((SELECT top 1 SUM(Calc_IT_Amount) FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 9021), 0)
+
+        SET @NetTaxIncome = ROUND(IIF(@NetTaxIncome <= 0, 0, @NetTaxIncome), 0)
+
+        INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind)
+        VALUES (@EmpNo, 1106, @NetTaxIncome, 'E')
+
+--        -- Income Tax calculation 5006
+         EXEC Sp_IT_TaxCalc @EmpNo
+
+
+
+
+--        -- Working Woman Tax Exemption --5012
+     SELECT @WomanITaxExemption = IT_WomenITExempt
+FROM Hrm_IT_ExemptParam;
+       SELECT top 1 @Gender = UPPER(Emp_Sex) FROM Hrm_Emp_Master WHERE Emp_No = @EmpNo
+        IF @Gender = 'F'
+          BEGIN
+           INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind)
+           VALUES (@EmpNo, 5012, @WomanITaxExemption, 'D')
+         END
+
+--        -- Final Tax
+        SELECT  top 1 @Amt5006 = ISNULL((SELECT top 1 SUM(Calc_IT_Amount) FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 5006), 0)
+        SELECT top 1 @Amt5012 = ISNULL((SELECT top 1 SUM(Calc_IT_Amount) FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 5012), 0)
+
+         SET @VarVariant = @Amt5006 - @Amt5012
+         IF @VarVariant < 0 SET @VarVariant = 0
+
+        INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind)
+        VALUES (@EmpNo, 5013, @VarVariant, 'D')
+
+
+
+
+
+--		--Checked
+--        -- Balance Tax Payable (5007)  For WOMAN Employee 5007 = (5013 - 8000) ,For MALE Employee  5007 = (5006 - 8000)
+      
+
+IF @Gender = 'F'
+BEGIN
+    SET @BalTaxPayable = ISNULL((SELECT top 1 SUM(Calc_IT_Amount) 
+                                 FROM Hrm_Emp_CalcIT 
+                                 WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 5013), 0) - 
+                        ISNULL((SELECT top 1 SUM(Calc_IT_TaxRebate) 
+                                 FROM Hrm_Emp_CalcIT 
+                                 WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 8000), 0);
+
+    -- Check if 5013 amount is less than 8000 code amount
+    IF (ISNULL((SELECT top 1 SUM(Calc_IT_Amount) FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 5013), 0) < 
+        ISNULL((SELECT top 1 SUM(Calc_IT_TaxRebate) FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 8000), 0))
+    BEGIN
+        SET @BalTaxPayable = ISNULL((SELECT top 1 SUM(Calc_IT_Amount) 
+                                     FROM Hrm_Emp_CalcIT 
+                                     WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 5013), 0);
+    END
+END
+ELSE
+BEGIN
+    SET @BalTaxPayable = ISNULL((SELECT top 1 SUM(Calc_IT_Amount) 
+                                 FROM Hrm_Emp_CalcIT 
+                                 WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 5006), 0) - 
+                        ISNULL((SELECT top 1 SUM(Calc_IT_TaxRebate) 
+                                 FROM Hrm_Emp_CalcIT 
+                                 WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 8000), 0);
+
+    -- Check if 5006 amount is less than 8000 code amount
+   DECLARE @SumAmount5006 DECIMAL(18, 2);
+DECLARE @SumTaxRebate8000 DECIMAL(18, 2);
+
+-- Calculate the sum for Calc_IT_Code 5006
+SELECT @SumAmount5006 = ISNULL(SUM(Calc_IT_Amount), 0)
+FROM Hrm_Emp_CalcIT 
+WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 5006;
+
+-- Calculate the sum for Calc_IT_Code 8000
+SELECT @SumTaxRebate8000 = ISNULL(SUM(Calc_IT_TaxRebate), 0)
+FROM Hrm_Emp_CalcIT 
+WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 8000;
+
+-- Compare the sums and set @BalTaxPayable accordingly
+IF @SumAmount5006 < @SumTaxRebate8000
+BEGIN
+    SET @BalTaxPayable = @SumAmount5006;
+END
+ELSE
+BEGIN
+    SET @BalTaxPayable = @SumAmount5006;
+END
+
+END
+
+INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind)
+VALUES (@EmpNo, 5007, @BalTaxPayable, 'D');
+
+
+
+
+
+--		--Checked
+       --Surcharge (5008)
+       SELECT @SurchargePer = ISNULL((select top 1 IT_SurchargePer from Hrm_IT_ExemptParam), 0)
+		SELECT @BalTaxPayable=isnull((select top 1 Calc_IT_Amount from Hrm_Emp_CalcIT 
+            where Calc_IT_Code = 5007 and Calc_IT_EmpNo = @EmpNo),0)
+
+       SET @Surcharge = ROUND(@BalTaxPayable * @SurchargePer / 100, 0)
+
+        INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind)
+       VALUES (@EmpNo, 5008, @Surcharge, 'D')
+		--checked
+     --    Total Tax Payable (5009)
+       SELECT @TotalTax = ISNULL((SELECT top 1 SUM(Calc_IT_Amount) FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 5007), 0) + 
+                           ISNULL((SELECT top 1 SUM(Calc_IT_Amount) FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 5008), 0)
+
+        INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind)
+        VALUES (@EmpNo, 5009, @TotalTax, 'D')
+
+--        -- Already paid tax (5010)
+        SELECT @TaxPaid =  isnull((select top 1 sum(PayTr_Amt) from Hrm_TransLedger where 
+                         PayTr_EmpNo = @EmpNo and PayTr_Code in (5006,6017) and 
+                           CONVERT(Datetime,'01-'+CONVERT(Varchar(2),PayTr_Month) + '-' + CONVERT(Varchar(4),PayTr_Year),103) Between 
+                           (select Br_Fin_StartDt from Hrm_Br_Param) and (select Br_Fin_EndDt from Hrm_Br_Param)),0) 
+                            + isnull((select Cu_Tr_Amt from Hrm_CurrentLedger where 
+                           Cu_Tr_EmpNo = @EmpNo and Cu_Tr_Code in (5006,6017)),0)
+
+        INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind)
+        VALUES (@EmpNo, 5010, @TaxPaid, 'D')
+
+--		--checked
+     declare @NetTax decimal(18,2)
+		SELECT @NetTax =isnull((select top 1 Calc_IT_Amount from Hrm_Emp_CalcIT where 
+          Calc_IT_EmpNo = @EmpNo and Calc_IT_Code = 5009),0) -
+          isnull((select top 1 Calc_IT_Amount from Hrm_Emp_CalcIT where 
+          Calc_IT_EmpNo =@EmpNo and Calc_IT_Code = 5010),0) 
+
+--  --      -- Net Tax Payable (5011)
+        
+  INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind)
+   VALUES (@EmpNo, 5011, 
+   ISNULL((SELECT top 1 Calc_IT_Amount FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 5009), 0)
+   -
+     ISNULL((SELECT top 1 Calc_IT_Amount FROM Hrm_Emp_CalcIT WHERE Calc_IT_EmpNo = @EmpNo AND Calc_IT_Code = 5010), 0), 
+'D');
+  INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind)
+     VALUES (@EmpNo, 5011, @NetTax, 'D')
+
+---------------------------------------------------------------------------------------------------------------------------
+
+  
+
+
+
+
+--  DECLARE @NetTax DECIMAL(18, 2)
+
+--SELECT @NetTax = ISNULL((
+--        SELECT Calc_IT_Amount
+--        FROM Hrm_Emp_CalcIT
+--        WHERE Calc_IT_EmpNo = @EmpNo
+--            AND Calc_IT_Code = 5009
+--        ), 0) - ISNULL((
+--        SELECT Calc_IT_Amount
+--        FROM Hrm_Emp_CalcIT
+--        WHERE Calc_IT_EmpNo = @EmpNo
+--            AND Calc_IT_Code = 5010
+--        ), 0)
+
+--    INSERT INTO Hrm_Emp_CalcIT (Calc_IT_EmpNo, Calc_IT_Code, Calc_IT_Amount, Calc_IT_Ind)
+--     VALUES (@EmpNo, 5011, @NetTax, 'D')
+--    END TRY
+--    BEGIN CATCH
+--        -- Handle errors
+--        SELECT 
+--            ERROR_NUMBER() AS ErrorNumber,
+--            ERROR_MESSAGE() AS ErrorMessage;
+--    END CATCH
+END
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+======================
+EMPLOYEE-SERVICES
+=====================
+
+USE [HRMSNEW]
+GO
+/****** Object:  StoredProcedure [dbo].[Service_Employees]    Script Date: 06-07-2024 10:49:43 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+/*
+exec Service_Employees '2005-09-30'
+*/
+-- Employees' service period
+-- Here, 'YrMthDayDiff' Stored Procedure is used (script is given below pasted and commented)
+ALTER procedure [dbo].[Service_Employees] (@AsOnDt Datetime) as
+declare @Emp_No Int, @Emp_Name varchar(40) , @Emp_JoinDt Datetime, @Hrm_Desc Varchar(40),
+        @ty Tinyint, @tm Tinyint, @td Tinyint, @vdt varchar(10), @LOPs SmallInt,
+		@Emp_JoinDt_New Datetime
+
+    set nocount on
+    if exists (select * from sysobjects where name = '#EmpService')
+        drop table #EmpService
+
+    create table #EmpService (Emp_No Int, Emp_Name varchar(40) , Emp_JoinDt varchar(10), Desig Varchar(40),
+                              Years Tinyint, Months Tinyint, Days Tinyint, Lps SmallInt)
+
+    declare EmpCur cursor scroll for
+        select a.Emp_No, a.Emp_Name, a.Emp_JoinDt, b.Hrm_Desc
+        from hrm_emp_master a, hrm_genmst b
+        where a.emp_status = 1
+                and a.Emp_ConfDt is NOT NULL
+                and a.Emp_Desig = b.Hrm_Scode 
+                and b.Hrm_Mcode = 10 
+       order by a.Emp_branch, a.Emp_no
+
+open EmpCur
+fetch first from EmpCur into @Emp_No, @Emp_Name, @Emp_JoinDt, @Hrm_Desc
+while @@fetch_status = 0 
+begin
+	select @LOPs = isnull(sum(LOP_NO_Days),0) from Hrm_LOP where LOP_EmpNo = @Emp_No
+		and ( LOP_From_Dt >= @Emp_JoinDt and LOP_To_Dt <= @AsOnDt )
+	if @LOPs >= 1
+		begin
+			-- @Emp_JoinDt is added with LOPs  ( to reduce LOPs from his service period 
+			-- as this @Emp_No is used in following procedure 'YrMthDayDiff' to find
+			-- Year, Month, Days )
+			set @Emp_JoinDt_New = dateadd ( d , @LOPs , @Emp_JoinDt )
+		end
+	else
+		begin
+			set @Emp_JoinDt_New = @Emp_JoinDt
+		end
+    exec YrMthDayDiff @Emp_JoinDt_New, @AsOnDt, @ty output, @tm output, @td output
+    set @vdt = convert(varchar(10), @Emp_JoinDt, 104)
+    insert into #EmpService values (@Emp_No, @Emp_Name, @vdt, @Hrm_Desc, @ty, @tm, @td, @LOPs)
+	select @LOPs = 0
+fetch next from EmpCur into @Emp_No, @Emp_Name, @Emp_JoinDt, @Hrm_Desc
+end
+
+close EmpCur
+deallocate EmpCur
+
+set nocount off
+select Emp_No 'Employee No', Emp_Name 'Name', Emp_JoinDt 'Join Dt', Desig 'Designation',
+                              Years, Months, Days , Lps 'LOPs' from #EmpService
+
+
+/*
+CREATE procedure YrMthDayDiff 
+    (@fmdt datetime, @todt datetime, @y tinyint output, @m tinyint output, @d tinyint output)
+as
+declare @yr tinyint, @mth tinyint, @dy tinyint
+declare @fmdt1 datetime, @fmdt2 datetime, @todt1 datetime, @todt2 datetime
+declare @tempdt datetime, @lastday char(1)
+    select @yr = 0, @mth = 0, @dy = 0
+if @todt < @fmdt
+        select @y = @yr, @m = @mth, @d = @dy
+else
+    begin --1
+        set @lastday = case when month(@todt) = month(dateadd(d,1,@todt)) then 'N'
+                            else 'Y' end
+        set @tempdt = dateadd(m,1,@fmdt)
+        while @tempdt <= @todt
+        begin --2
+--            select 'here - 2'
+            set @mth = @mth + 1
+            if @mth=12 
+                begin
+                    set @yr = @yr + 1
+                    set @mth = 0
+                end
+            set @tempdt = dateadd(m,1,@tempdt)
+        end --2
+        set @tempdt =dateadd(m,-1,@tempdt)
+        set @dy = datediff(d,@tempdt,@todt) + 1
+--        select @dy '@dy', @tempdt '@tempdt' , @todt '@todt'
+--        select @mth '@mth'
+        if @dy  = datepart(d,@todt) and @lastday = 'Y'
+            begin
+--                select 'here - 1'
+                set @dy = 0
+                set @mth = @mth + 1
+                if @mth = 12
+                    begin
+                        set @mth = 0
+                        set @yr = @yr + 1
+                    end
+            end
+    end --1
+select @y = @yr, @m = @mth, @d = @dy
+*/
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+====================
+CALCULATE - SALARY
+====================
+
+USE [HRMSNEW]
+GO
+/****** OBJECT:  STOREDPROCEDURE [DBO].[SP_CALCULATE_SALARY]    SCRIPT DATE: 06-07-2024 10:50:49 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- AUTHOR:		MOKSHITH
+-- CREATE DATE: 03-06-2024
+-- DESCRIPTION:	TO CALCULATE SALARY
+-- =============================================
+ALTER PROCEDURE [DBO].[SP_CALCULATE_SALARY] 
+	-- ADD THE PARAMETERS FOR THE STORED PROCEDURE HERE
+AS
+BEGIN
+	-- SET NOCOUNT ON ADDED TO PREVENT EXTRA RESULT SETS FROM
+	-- INTERFERING WITH SELECT STATEMENTS.
+	SET NOCOUNT ON;
+
+	DECLARE @MTH VARCHAR(10)
+	DECLARE @YR INT
+	SELECT 
+	@MTH=CONVERT(VARCHAR(10), DATENAME(MM,DATEADD(M,1,BR_LASTPROCESS))),
+	@YR=YEAR(DATEADD(M,1,BR_LASTPROCESS))
+	FROM HRM_BR_PARAM
+
+	-- SALARY CALCULATION.
+	--CHECK IF THE MONTH IS MARCH
+	--IF UPPER(@MTH)='MARCH'
+	--BEGIN
+	--END
+	--CURRENT SALARY CALCULATION
+	EXEC SP_SALCALC
+	--AMOUNTS CALCULATIONS ON LOPS TAKEN IN PREVIOUS MONTHS
+	EXEC SP_SALCALCPREVLOP
+	--SUBTRACTING LOP AMOUNTS FROM CURRENT SALARY
+	EXEC SP_CUPLUSLOP
+	--ARREAR SALARY CALCULATION
+	EXEC SP_SALCALCARR
+	--INCREMENT SALARY CALCULATION
+	EXEC SP_SALCALCINCRE
+	--LOAN INTEREST CALCULATIONS
+	EXEC SP_LOANINTCALC
+	--ADDING CURRRENT AND ARREAR SALARY CALCULATION AND ROUNDING OFF
+	EXEC SP_CUPLUSARRSALARY
+	--PF, EPF, EPS CALCULATION FOR LOPS TAKEN IN PREVIOUS MONTHS AND TAKING INTO ACCOUNT CURRENT MONTH.
+	EXEC SP_PFEPFEPSCALCLOP
+	--CALCULATING P.TAX AFTER ADDING CURRENT LEDGER AND ARREAR AMOUNTS
+	EXEC SP_PTCALC
+	--UPDATING TAXABLE AMOUNT IN HRM_CURRENTLEDGER W.R.T TAXABLE LIMIT FROM HRM_ED_MASTER
+	EXEC SP_UPDTAXABLE
+
+	IF UPPER(@MTH)='MARCH'
+	BEGIN
+		DECLARE @EMPCONV_EMPNO INT,@EMPCONV_AMT DECIMAL(15,2),@EMPCONV_TAXABLE DECIMAL(15,2)
+		DECLARE @CU_TR_AMT DECIMAL(15,2),@CU_TR_TAXABLE DECIMAL(15,2)
+
+		DECLARE MARCONVCURSOR CURSOR FOR
+		SELECT EMPCONV_EMPNO,EMPCONV_AMT,EMPCONV_TAXABLE FROM HRM_MAR_CONV
+		WHERE EMPCONV_MONTH=3 AND EMPCONV_YEAR=@YR
+		OPEN MARCONVCURSOR
+		FETCH NEXT FROM MARCONVCURSOR INTO @EMPCONV_EMPNO,@EMPCONV_AMT,@EMPCONV_TAXABLE
+		WHILE @@FETCH_STATUS=0
+		BEGIN
+			
+			IF EXISTS(SELECT 1 FROM HRM_CURRENTLEDGER WHERE CU_TR_EMPNO=@EMPCONV_EMPNO AND CU_TR_MONTH=3 AND CU_TR_YEAR=@YR AND CU_TR_CODE=1005)
+			BEGIN
+				SELECT @CU_TR_AMT=CU_TR_AMT,@CU_TR_TAXABLE=CU_TR_TAXABLE FROM HRM_CURRENTLEDGER
+				WHERE CU_TR_EMPNO=@EMPCONV_EMPNO AND CU_TR_MONTH=3 AND CU_TR_YEAR=@YR AND CU_TR_CODE=1005
+				IF @CU_TR_AMT!=@EMPCONV_AMT OR @CU_TR_TAXABLE!=@EMPCONV_TAXABLE
+				BEGIN
+					UPDATE HRM_CURRENTLEDGER
+					SET CU_TR_AMT=@EMPCONV_AMT, CU_TR_TAXABLE=@EMPCONV_TAXABLE
+					WHERE CU_TR_EMPNO=@EMPCONV_EMPNO AND CU_TR_MONTH=3 AND CU_TR_YEAR=@YR AND CU_TR_CODE=1005
+					PRINT 'UPDATE COMPELETE'
+				END
+			END
+		FETCH NEXT FROM MARCONVCURSOR INTO @EMPCONV_EMPNO,@EMPCONV_AMT,@EMPCONV_TAXABLE
+		END
+		CLOSE MARCONVCURSOR
+		DEALLOCATE MARCONVCURSOR
+	END
+END
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+================
+CURSOR-EXAMPLE
+================
+
+USE [HRMSNEW]
+GO
+/****** OBJECT:  STOREDPROCEDURE [DBO].[SP_IT_TOTSAL]    SCRIPT DATE: 06-07-2024 10:52:40 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+ALTER PROCEDURE [DBO].[SP_IT_TOTSAL] (@EMPNO INT, @CALDATE DATETIME) AS
+DECLARE
+    @BR_FIN_STARTDT DATETIME, @BR_FIN_ENDDT DATETIME, @BR_LASTPROCESS DATETIME,
+    @ITE_CODE INT, @ITE_DESC VARCHAR(30), @ITE_PAYMODE CHAR(1),
+    @AMT DECIMAL(15,2), @CUAMT DECIMAL(15,2), @PAMT DECIMAL(15,2),
+    @RESIGN TINYINT, @RESIGNDT DATETIME
+
+IF EXISTS (SELECT * FROM SYSOBJECTS WHERE NAME = '#IT_TOTSAL')
+DROP TABLE #IT_TOTSAL
+
+SET @BR_FIN_STARTDT = (SELECT BR_FIN_STARTDT FROM HRM_BR_PARAM)
+SET @BR_FIN_ENDDT   = (SELECT BR_FIN_ENDDT FROM HRM_BR_PARAM)
+SET @BR_LASTPROCESS = (SELECT BR_LASTPROCESS FROM HRM_BR_PARAM)
+SELECT @CUAMT = 0, @PAMT = 0, @AMT = 0
+
+SELECT * INTO #IT_TOTSAL FROM HRM_TRANSLEDGER WHERE PAYTR_EMPNO =  @EMPNO AND
+            CONVERT(DATETIME,'01-'+CONVERT(VARCHAR(2),PAYTR_MONTH) + '-' + CONVERT(VARCHAR(4),PAYTR_YEAR),103)
+            BETWEEN @BR_FIN_STARTDT AND @BR_LASTPROCESS
+
+SELECT @RESIGN = EMP_STATUS, @RESIGNDT = EMP_RESIGDT FROM HRM_EMP_MASTER WHERE
+    EMP_NO = @EMPNO
+
+DECLARE ITENTRIES CURSOR SCROLL FOR 
+    SELECT ED_CODE, ED_DESC, ED_PAYMODE FROM HRM_ED_MASTER WHERE ED_CODE <= 4999 AND
+    UPPER(ED_TAXABLE) = 'Y' ORDER BY ED_CODE
+OPEN ITENTRIES
+FETCH FIRST FROM ITENTRIES INTO @ITE_CODE, @ITE_DESC, @ITE_PAYMODE
+WHILE @@FETCH_STATUS = 0
+BEGIN
+IF UPPER(@ITE_PAYMODE) = 'M' -- MONTHLY MODE
+    BEGIN -- BEGIN 'M'
+        IF @RESIGN = 2 AND ISDATE(@RESIGNDT) = 1 -- RESIGNED
+            BEGIN
+                -- SUM OF PREVIOUS AMOUNTS W.R.T EACH ED_CODE FROM HRM_TRANSLEDGER FROM FINANCIAL YEAR START DATE
+                SET @PAMT = ISNULL((SELECT SUM(PAYTR_AMT) FROM #IT_TOTSAL  WHERE PAYTR_CODE = @ITE_CODE),0)
+                SET @AMT = @PAMT
+
+                INSERT INTO HRM_EMP_CALCIT (CALC_IT_EMPNO, CALC_IT_CODE, CALC_IT_AMOUNT, CALC_IT_IND)
+                    VALUES (@EMPNO, @ITE_CODE, @AMT, 'E')
+            END -- RESIGNED
+        ELSE 
+            BEGIN
+                -- SUM OF PREVIOUS AMOUNTS W.R.T EACH ED_CODE FROM HRM_TRANSLEDGER FROM FINANCIAL YEAR START DATE
+                SET @PAMT = ISNULL((SELECT SUM(PAYTR_AMT) FROM #IT_TOTSAL  WHERE PAYTR_CODE = @ITE_CODE),0)
+                -- AMOUNT FROM HRM_CURRENTLEDGER * NO. OF REMAINING MONTHS
+                SET @CUAMT = ISNULL((SELECT CU_TR_AMT FROM HRM_CURRENTLEDGER WHERE CU_TR_EMPNO = @EMPNO 
+                                AND CU_TR_CODE = @ITE_CODE),0)
+		-- ADDED BY VIJAY 
+		-- CALCULATES UPTO RESIGNED MONTH ONLY
+------------------------------ADDED-----------
+		IF ISDATE(@RESIGNDT) <> 1 OR @RESIGNDT > @BR_FIN_ENDDT
+		  
+		BEGIN
+------------------------------ADDED------------
+			-- ORIGINAL
+         -- IF @EMPNO<>336
+	                SET @CUAMT = @CUAMT * (DATEDIFF(MM, @CALDATE, @BR_FIN_ENDDT) + 1)
+-------------------------------ADDED---------
+		END
+		ELSE
+		BEGIN
+			IF ISDATE(@RESIGNDT) = 1 AND @RESIGNDT < = @BR_FIN_ENDDT
+        	        SET @CUAMT = @CUAMT * (DATEDIFF(MM, @CALDATE, @RESIGNDT) + 1)
+		END
+--------------------------------ADDED---------
+                SET @AMT = @PAMT + @CUAMT
+
+                INSERT INTO HRM_EMP_CALCIT (CALC_IT_EMPNO, CALC_IT_CODE, CALC_IT_AMOUNT, CALC_IT_IND)
+                    VALUES (@EMPNO, @ITE_CODE, @AMT, 'E')
+            END
+    END -- END 'M'
+IF UPPER(@ITE_PAYMODE) = 'Y' -- YEARLY MODE
+    BEGIN --BEGIN 'Y'
+        SET @CUAMT = ISNULL((SELECT CU_TR_AMT FROM HRM_CURRENTLEDGER WHERE CU_TR_EMPNO = @EMPNO 
+                            AND CU_TR_CODE = @ITE_CODE),0)
+        SET @PAMT = ISNULL((SELECT SUM(PAYTR_AMT) FROM #IT_TOTSAL  WHERE PAYTR_CODE = @ITE_CODE),0)
+        SET @AMT = @CUAMT + @PAMT
+        INSERT INTO HRM_EMP_CALCIT (CALC_IT_EMPNO, CALC_IT_CODE, CALC_IT_AMOUNT, CALC_IT_IND)
+                    VALUES (@EMPNO, @ITE_CODE, @AMT, 'E')
+    END --END 'Y'
+SELECT @CUAMT = 0, @PAMT = 0, @AMT = 0
+FETCH NEXT FROM ITENTRIES INTO @ITE_CODE, @ITE_DESC, @ITE_PAYMODE
+END
+
+CLOSE ITENTRIES
+DEALLOCATE ITENTRIES
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
