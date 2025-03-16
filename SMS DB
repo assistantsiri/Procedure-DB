@@ -1,1 +1,129 @@
 https://github.com/z9fr/School-Management-System
+
+
+ public bool InsertApplicationDate(Web.Models.AnnexureModel model)
+ {
+     using (OracleConnection conn = new OracleConnection(Constants.ConnectionString))
+     {
+         using (OracleCommand cmd = new OracleCommand("SP_MANAGE_APPDATEOFDEAF", conn))
+         {
+             cmd.CommandType = CommandType.StoredProcedure;
+
+             cmd.Parameters.Add("P_DPCODE", OracleDbType.Int32).Value = model.Dpcode;
+             cmd.Parameters.Add("P_ACCOUNTNUMBER", OracleDbType.Varchar2).Value = model.AccountNumber;
+             cmd.Parameters.Add("P_CONTROLNUMBER", OracleDbType.Varchar2).Value = model.ControlNumber;
+             cmd.Parameters.Add("P_ACCOUNTID", OracleDbType.Varchar2).Value = model.AccountId;
+             cmd.Parameters.Add("P_APPLICATIONCLAIMEDDATE", OracleDbType.Varchar2).Value = model.ApplicationClaimedDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_APPLICATIONAPPROVEDBY", OracleDbType.Varchar2).Value = model.ApplicationApprovedBy;
+             cmd.Parameters.Add("P_APPLICATIONREJECTEDBY", OracleDbType.Varchar2).Value = model.ApplicationRejectedBy;
+             cmd.Parameters.Add("P_APPLICATIONAPPROVEDBRANCHDATE", OracleDbType.Varchar2).Value = model.ApplicationApprovedBranchDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_APPLICATIONAPPROVED_MAN_DATE", OracleDbType.Varchar2).Value = model.ApplicationApprovedManDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_APPLICATIONAPPROVED_RO_OF_DATE", OracleDbType.Varchar2).Value = model.ApplicationApprovedRoOfDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_APPLICATIONAPPROVED_CO_MA_DATE", OracleDbType.Varchar2).Value = model.ApplicationApprovedCoMaDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_APPLICATIONAPPROVED_HO_OF_DATE", OracleDbType.Varchar2).Value = model.ApplicationApprovedHoOfDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_APPLICATIONAPPROVED_HO_MA_DATE", OracleDbType.Varchar2).Value = model.ApplicationApprovedHoMaDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_APPLICATIONREJECTEDBRANCHDATE", OracleDbType.Varchar2).Value = model.ApplicationRejectedBranchDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_APPLICATIONREJECTED_MAN_DATE", OracleDbType.Varchar2).Value = model.ApplicationRejectedManDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_APPLICATIONREJECTED_RO_OF_DATE", OracleDbType.Varchar2).Value = model.ApplicationRejectedRoOfDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_APPLICATIONREJECTED_CO_MA_DATE", OracleDbType.Varchar2).Value = model.ApplicationRejectedCoMaDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_APPLICATIONREJECTED_HO_OF_DATE", OracleDbType.Varchar2).Value = model.ApplicationRejectedHoOfDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_APPLICATIONREJECTED_HO_MA_DATE", OracleDbType.Varchar2).Value = model.ApplicationRejectedHoMaDate ?? (object)DBNull.Value;
+             cmd.Parameters.Add("P_REMARKS", OracleDbType.Varchar2).Value = model.Remarks;
+
+             try
+             {
+                 conn.Open();
+                 cmd.ExecuteNonQuery();
+                 return true;
+             }
+             catch (Exception ex)
+             {
+                 Console.WriteLine("Error: " + ex.Message);
+                 return false;
+             }
+         }
+     }
+ }
+
+
+=========================================================================================
+
+drop TABLE APPLICATIONDATEOFDEAF
+
+CREATE TABLE APPLICATIONDATEOFDEAF
+(
+  DPCODE NUMBER,
+  ACCOUNTNUMBER                  VARCHAR2(50),
+  CONTROLNUMBER                  VARCHAR2(50),
+  ACCOUNTID                      VARCHAR2(50),
+  APPLICATIONCLAIMEDDATE          VARCHAR2(20),
+  APPLICATIONAPPROVEDBY           VARCHAR2(20),
+  APPLICATIONREJECTEDBY            VARCHAR2(20),
+  APPLICATIONAPPROVEDBRANCHDATE     VARCHAR2(20),
+  APPLICATIONAPPROVED_MAN_DATE      VARCHAR2(20),
+  APPLICATIONAPPROVED_RO_OF_DATE     VARCHAR2(20),
+  APPLICATIONAPPROVED_CO_MA_DATE     VARCHAR2(20),
+  APPLICATIONAPPROVED_HO_OF_DATE     VARCHAR2(20),
+  APPLICATIONAPPROVED_HO_MA_DATE    VARCHAR2(20),
+  APPLICATIONREJECETDBRANCHDATE     VARCHAR2(20),
+  APPLICATIONREJECETD_MAN_DATE      VARCHAR2(20),
+  APPLICATIONREJECETD_RO_OF_DATE    VARCHAR2(20),
+  APPLICATIONREJECETD_CO_MA_DATE     VARCHAR2(20),
+  APPLICATIONREJECETD_HO_OF_DATE     VARCHAR2(20),
+  APPLICATIONREJECETD_HO_MA_DATE    VARCHAR2(20),
+  REMARKS                           VARCHAR2(1000)
+)
+
+SELECT * FROM APPLICATIONDATEOFDEAF
+
+
+
+
+SELECT * FROM SB_ACCOUNTS WHERE DPCODE=701 AND ACCOUNTNUMBER='0290401000100' FOR UPDATE  --75555.9900   MANAGER TO RO
+SELECT *  FROM ANNEXURE WHERE DPCODE=701 AND ACCOUNTNUMBER='0290401000100'
+
+
+-------------------------------------------------------------------------------------------------------------
+CREATE OR REPLACE PROCEDURE SP_MANAGE_APPDATEOFDEAF  (
+    P_DPCODE                             NUMBER,
+    P_ACCOUNTNUMBER                      VARCHAR2,
+    P_CONTROLNUMBER                      VARCHAR2,
+    P_ACCOUNTID                          VARCHAR2,
+    P_APPLICATIONCLAIMEDDATE             VARCHAR2,
+    P_APPLICATIONAPPROVEDBY              VARCHAR2,
+    P_APPLICATIONREJECTEDBY              VARCHAR2,
+    P_APPLICATIONAPPROVEDBRANCHDATE      VARCHAR2,
+    P_APPLICATIONAPPROVED_MAN_DATE       VARCHAR2,
+    P_APPLICATIONAPPROVED_RO_OF_DATE     VARCHAR2,
+    P_APPLICATIONAPPROVED_CO_MA_DATE     VARCHAR2,
+    P_APPLICATIONAPPROVED_HO_OF_DATE     VARCHAR2,
+    P_APPLICATIONAPPROVED_HO_MA_DATE     VARCHAR2,
+    P_APPLICATIONREJECTEDBRANCHDATE      VARCHAR2,
+    P_APPLICATIONREJECTED_MAN_DATE       VARCHAR2,
+    P_APPLICATIONREJECTED_RO_OF_DATE     VARCHAR2,
+    P_APPLICATIONREJECTED_CO_MA_DATE     VARCHAR2,
+    P_APPLICATIONREJECTED_HO_OF_DATE     VARCHAR2,
+    P_APPLICATIONREJECTED_HO_MA_DATE     VARCHAR2,
+    P_REMARKS                            VARCHAR2
+) 
+AS
+BEGIN
+    INSERT INTO APPLICATIONDATEOFDEAF (
+        DPCODE, ACCOUNTNUMBER, CONTROLNUMBER, ACCOUNTID, APPLICATIONCLAIMEDDATE,
+        APPLICATIONAPPROVEDBY, APPLICATIONREJECTEDBY, APPLICATIONAPPROVEDBRANCHDATE,
+        APPLICATIONAPPROVED_MAN_DATE, APPLICATIONAPPROVED_RO_OF_DATE, APPLICATIONAPPROVED_CO_MA_DATE,
+        APPLICATIONAPPROVED_HO_OF_DATE, APPLICATIONAPPROVED_HO_MA_DATE, APPLICATIONREJECTEDBRANCHDATE,
+        APPLICATIONREJECTED_MAN_DATE, APPLICATIONREJECTED_RO_OF_DATE, APPLICATIONREJECTED_CO_MA_DATE,
+        APPLICATIONREJECTED_HO_OF_DATE, APPLICATIONREJECTED_HO_MA_DATE, REMARKS
+    ) VALUES (
+        P_DPCODE, P_ACCOUNTNUMBER, P_CONTROLNUMBER, P_ACCOUNTID, P_APPLICATIONCLAIMEDDATE,
+        P_APPLICATIONAPPROVEDBY, P_APPLICATIONREJECTEDBY, P_APPLICATIONAPPROVEDBRANCHDATE,
+        P_APPLICATIONAPPROVED_MAN_DATE, P_APPLICATIONAPPROVED_RO_OF_DATE, P_APPLICATIONAPPROVED_CO_MA_DATE,
+        P_APPLICATIONAPPROVED_HO_OF_DATE, P_APPLICATIONAPPROVED_HO_MA_DATE, P_APPLICATIONREJECTEDBRANCHDATE,
+        P_APPLICATIONREJECTED_MAN_DATE, P_APPLICATIONREJECTED_RO_OF_DATE, P_APPLICATIONREJECTED_CO_MA_DATE,
+        P_APPLICATIONREJECTED_HO_OF_DATE, P_APPLICATIONREJECTED_HO_MA_DATE, P_REMARKS
+    );
+
+    COMMIT;
+END SP_MANAGE_APPDATEOFDEAF ;
+
