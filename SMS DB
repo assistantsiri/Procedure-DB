@@ -127,3 +127,29 @@ BEGIN
     COMMIT;
 END SP_MANAGE_APPDATEOFDEAF ;
 
+
+public class ApplicationDateOfDeafModel
+{
+    public int DpCode { get; set; }
+    public string AccountNumber { get; set; }
+    public string ControlNumber { get; set; }
+    public string AccountId { get; set; }
+    public DateTime? ApplicationClaimedDate { get; set; }
+    public string ApplicationApprovedBy { get; set; }
+    public string ApplicationRejectedBy { get; set; }
+    public DateTime? ApplicationApprovedBranchDate { get; set; }
+    public DateTime? ApplicationApprovedManDate { get; set; }
+    public DateTime? ApplicationApprovedRoOfDate { get; set; }
+    public DateTime? ApplicationApprovedCoMaDate { get; set; }
+    public DateTime? ApplicationApprovedHoOfDate { get; set; }
+    public DateTime? ApplicationApprovedHoMaDate { get; set; }
+    public DateTime? ApplicationRejectedBranchDate { get; set; }
+    public DateTime? ApplicationRejectedManDate { get; set; }
+    public DateTime? ApplicationRejectedRoOfDate { get; set; }
+    public DateTime? ApplicationRejectedCoMaDate { get; set; }
+    public DateTime? ApplicationRejectedHoOfDate { get; set; }
+    public DateTime? ApplicationRejectedHoMaDate { get; set; }
+    public string Remarks { get; set; }
+}
+
+
